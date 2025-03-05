@@ -1,0 +1,565 @@
+# Load the Excel file into R
+> library(readxl)
+> data <- read_excel("C:/Users/HP/OneDrive - Manipal Academy of Higher Education/Desktop/GMU/Third semester (Fall 2024)/Research project/Supplementary information/Supplementary Table 3.xlsx", sheet = "Supernatant Proteomics")
+
+# Exclude metadata columns (ID, Organism, Protein, Gene) by selecting only numeric columns
+> data_numeric <- data[, sapply(data, is.numeric)]
+
+> install.packages("randomForest")
+> library(randomForest)
+
+# Create the 'group' variable based on column names (e.g., WT, ΔciaD, Control)
+> group <- ifelse(grepl("F38011 WT", colnames(data_numeric)), "WT",
++                 ifelse(grepl("ΔciaD", colnames(data_numeric)), "ΔciaD", "Control"))
+
+# Convert 'group' to a factor
+> group <- as.factor(group)
+
+# Transpose data_numeric so that proteins are columns and samples are rows
+data_numeric_t <- t(data_numeric)
+
+# Run Random Forest
+rf_model <- randomForest(x = data_numeric_t, y = group, importance = TRUE)
+
+# View importance of features (proteins)
+importance(rf_model)
+
+> ranked_features <- importance[order(importance[, "MeanDecreaseAccuracy"], decreasing=TRUE),]
+> top10_indices <- as.numeric(rownames(ranked_features)[1:10])
+> top10_proteins <- data$Gene[top10_indices]
+> top10_proteins
+
+[1] "SERPINB1"  "S100A12"   "SERPINB10" "OLFM4"    
+ [5] "GOT2"      NA          "GPI"       "TALDO1"   
+ [9] NA          "LTF"
+
+> top30_proteins
+ [1] "SERPINB1"  "S100A12"   "SERPINB10" "OLFM4"    
+ [5] "GOT2"      NA          "GPI"       "TALDO1"   
+ [9] NA          "LTF"       "ANXA1"     "CYBRD1"   
+[13] "HNRNPL"    NA          NA          "SMPDL3B"  
+[17] "S100A8"    "FAH"       NA          "LCN2"     
+[21] "PRTN3"     "S100A9"    "GK"        "RTRAF"    
+[25] "ESD"       "ANXA11"    "TGM3"      "RIDA"     
+[29] "PSMA6"     "MIF"      
+
+TOP 30 = LTF, S100A8, LCN2, S100A9
+
+> top50_proteins
+ [1] "SERPINB1"  "S100A12"   "SERPINB10" "OLFM4"    
+ [5] "GOT2"      NA          "GPI"       "TALDO1"   
+ [9] NA          "LTF"       "ANXA1"     "CYBRD1"   
+[13] "HNRNPL"    NA          NA          "SMPDL3B"  
+[17] "S100A8"    "FAH"       NA          "LCN2"     
+[21] "PRTN3"     "S100A9"    "GK"        "RTRAF"    
+[25] "ESD"       "ANXA11"    "TGM3"      "RIDA"     
+[29] "PSMA6"     "MIF"       "FGA"       "MANF"     
+[33] "RBKS"      "RPS4X"     "HSPA4"     "AGT"      
+[37] NA          "CA4"       NA          "ICA"      
+[41] NA          "TAGLN"     "GLTP"      "ST13"     
+[45] "CTH"       "PSMB8"     "MYO7B"     "C8A"      
+[49] "NME2"      NA     
+
+
+# Extract rows corresponding to the top 10 proteins
+top30_protein_data <- data_numeric[top30_indices, ]
+
+# Subset samples for each group based on column names
+WT_samples <- data_numeric[, grepl("F38011 WT", colnames(data_numeric))]
+ΔciaD_samples <- data_numeric[, grepl("ΔciaD", colnames(data_numeric))]
+Control_samples <- data_numeric[, grepl("Control", colnames(data_numeric))]
+
+# Calculate the average expression for each protein in each category
+avg_WT <- rowMeans(top30_protein_data[, colnames(WT_samples)], na.rm = TRUE)
+avg_ΔciaD <- rowMeans(top30_protein_data[, colnames(ΔciaD_samples)], na.rm = TRUE)
+avg_Control <- rowMeans(top30_protein_data[, colnames(Control_samples)], na.rm = TRUE)
+
+# Create a data frame for protein expression levels and assign category based on max expression
+top30_protein_expression <- data.frame(Protein = top30_proteins,
+                                       WT_avg = avg_WT,
+                                       ΔciaD_avg = avg_ΔciaD,
+                                       Control_avg = avg_Control)
+
+# Assign category based on highest average expression
+top30_protein_expression$Category <- apply(top30_protein_expression[, c("WT_avg", "ΔciaD_avg", "Control_avg")], 1, 
+                                           function(x) names(which.max(x)))
+
+# View the result
+print(top30_protein_expression)
+
+     Protein     WT_avg   ciaD_avg  Control_avg    Category
+1   SERPINB1  5.4361356  5.4664502  4.758955448    ciaD_avg
+2    S100A12  4.5244191  4.1394612  3.114423151      WT_avg
+3  SERPINB10  1.9856616  1.7489543  0.602295895      WT_avg
+4      OLFM4  2.6267321  2.9783240  1.261058858    ciaD_avg
+5       GOT2  2.5958702  3.0657531  2.114632602    ciaD_avg
+6       <NA>  0.8857348  0.9576816 -4.910046818    ciaD_avg
+7        GPI  6.2481653  6.3404668  5.997166003    ciaD_avg
+8     TALDO1  1.8002416  1.8953562  1.728648314    ciaD_avg
+9       <NA> -2.0795316 -1.6181374 -5.291880927    ciaD_avg
+10       LTF  5.0849424  5.0199175  4.221760288      WT_avg
+11     ANXA1  2.1156343  1.9378332  0.896769625      WT_avg
+12    CYBRD1 -5.2342781 -2.2340826 -3.251701941    ciaD_avg
+13    HNRNPL -6.2414567 -2.6200506 -3.171876556    ciaD_avg
+14      <NA>  3.8326572  3.4794293  2.882894453      WT_avg
+15      <NA> -2.3642995 -1.4518227 -4.947889661    ciaD_avg
+16   SMPDL3B  3.4143941  3.6580466  2.996668720    ciaD_avg
+17    S100A8  2.4993611  2.1197376  1.012651223      WT_avg
+18       FAH  0.4814464  0.5963854  0.006406674    ciaD_avg
+19      <NA>  0.5192659  0.9395179 -4.803109169    ciaD_avg
+20      LCN2  2.2894034  2.4812615  0.552540579    ciaD_avg
+21     PRTN3  1.5978725  1.4928821  0.573751776      WT_avg
+22    S100A9  2.3667873  2.3035973  1.191359122      WT_avg
+23        GK -0.4777823 -0.5735095 -0.109646180 Control_avg
+24     RTRAF -4.1580225 -4.2046263 -2.897625170 Control_avg
+25       ESD -3.6171284 -3.4254905 -2.177881529 Control_avg
+26    ANXA11  1.1254067  1.4148289  0.969866419    ciaD_avg
+27      TGM3  0.8234322  0.7369958 -0.158005148      WT_avg
+28      RIDA  2.6268704  3.0056359  2.565819811    ciaD_avg
+29     PSMA6  1.7278576  1.7662888  1.729672909    ciaD_avg
+30       MIF  2.3909058  2.7216690  2.347210412    ciaD_avg
+
+Plotting graphs for top 30 proteins
+install.packages("ggplot2")
+library(ggplot2)
+
+install.packages("reshape2")
+library(reshape2)
+
+# Reshape the data from wide to long format for ggplot
+top30_protein_long <- melt(top30_protein_expression, id.vars = "Protein", 
+                           measure.vars = c("WT_avg", "ΔciaD_avg", "Control_avg"), 
+                           variable.name = "Category", value.name = "Expression")
+
+ggplot(top30_protein_long, aes(x = Protein, y = Expression, fill = Category)) +
+  geom_bar(stat = "identity", position = "dodge") +  # Bar plot with dodging
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  # Rotate x-axis labels
+  labs(title = "Average Expression Levels of Top 30 Proteins", 
+       x = "Protein", 
+       y = "Average Expression") +
+  scale_fill_manual(values = c("WT_avg" = "blue", "ΔciaD_avg" = "green", "Control_avg" = "red")) +
+  theme_minimal()
+
+Plotting graphs for selected proteins
+# Create a subset for proteins 10, 17, 20, and 22
+selected_proteins <- top30_protein_expression[c(10, 17, 20, 22), ]
+
+# Reshape the data from wide to long format for ggplot
+selected_proteins_long <- melt(selected_proteins, id.vars = "Protein", 
+                               measure.vars = c("WT_avg", "ΔciaD_avg", "Control_avg"),
+                               variable.name = "Category", value.name = "Expression")
+
+ggplot(selected_proteins_long, aes(x = Protein, y = Expression, fill = Category)) +
+  geom_bar(stat = "identity", position = "dodge") +  # Bar plot with dodging to separate categories
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  # Rotate x-axis labels for clarity
+  labs(title = "Expression Levels of Selected Proteins", 
+       x = "Protein", 
+       y = "Average Expression") +
+  scale_fill_manual(values = c("WT_avg" = "blue", "ΔciaD_avg" = "green", "Control_avg" = "red")) +
+  theme_minimal()
+
+Calculating SD:
+# Extract rows corresponding to the top 10 proteins
+top30_protein_data <- data_numeric[top30_indices, ]
+
+# Subset samples for each group based on column names
+WT_samples <- data_numeric[, grepl("F38011 WT", colnames(data_numeric))]
+ΔciaD_samples <- data_numeric[, grepl("ΔciaD", colnames(data_numeric))]
+Control_samples <- data_numeric[, grepl("Control", colnames(data_numeric))]
+
+# Calculate the average expression and standard deviation for each protein in each category
+avg_WT <- rowMeans(top30_protein_data[, colnames(WT_samples)], na.rm = TRUE)
+std_WT <- apply(top30_protein_data[, colnames(WT_samples)], 1, sd, na.rm = TRUE)
+
+avg_ΔciaD <- rowMeans(top30_protein_data[, colnames(ΔciaD_samples)], na.rm = TRUE)
+std_ΔciaD <- apply(top30_protein_data[, colnames(ΔciaD_samples)], 1, sd, na.rm = TRUE)
+
+avg_Control <- rowMeans(top30_protein_data[, colnames(Control_samples)], na.rm = TRUE)
+std_Control <- apply(top30_protein_data[, colnames(Control_samples)], 1, sd, na.rm = TRUE)
+
+# Create a data frame for protein expression levels, mean, and standard deviation
+top30_protein_expression <- data.frame(Protein = top30_proteins,
+                                       WT_avg = avg_WT,
+                                       WT_std = std_WT,
+                                       ΔciaD_avg = avg_ΔciaD,
+                                       ΔciaD_std = std_ΔciaD,
+                                       Control_avg = avg_Control,
+                                       Control_std = std_Control)
+
+# Assign category based on highest average expression
+top30_protein_expression$Category <- apply(top30_protein_expression[, c("WT_avg", "ΔciaD_avg", "Control_avg")], 1, 
+                                           function(x) names(which.max(x)))
+
+# View the result
+print(top30_protein_expression)
+
+          Protein    WT_avg    WT_std   ciaD_avg  ciaD_std                Control_avg  Control_std    Category
+1 	 SERPINB1  5.4361356 0.1464026  5.4664502 0.3503714		  4.758955448   0.2413884    ciaD_avg
+2 	  S100A12  4.5244191 0.4520154  4.1394612 0.8277326		  3.114423151   0.5404825      WT_avg
+3 	SERPINB10  1.9856616 0.3731694  1.7489543 0.8203575		  0.602295895   0.6126553      WT_avg
+4 	    OLFM4  2.6267321 0.8694742  2.9783240 0.4454573		  1.261058858   0.4574413    ciaD_avg
+5 	     GOT2  2.5958702 0.3243441  3.0657531 0.3151234		  2.114632602   0.5350495    ciaD_avg
+6 	     <NA>  0.8857348 0.6672412  0.9576816 0.6443699		 -4.910046818   1.1134622    ciaD_avg
+7 	      GPI  6.2481653 0.2945694  6.3404668 0.2385856		  5.997166003   0.2088971    ciaD_avg
+8 	   TALDO1  1.8002416 0.3413227  1.8953562 0.2832526		  1.728648314   0.2287430    ciaD_avg
+9 	     <NA> -2.0795316 0.1488882 -1.6181374 0.3387993		 -5.291880927   1.0887602    ciaD_avg
+10	      LTF  5.0849424 0.4185687  5.0199175 0.4691598		  4.221760288   0.5335084      WT_avg
+11	    ANXA1  2.1156343 0.5128387  1.9378332 0.4757046		  0.896769625   0.8882726      WT_avg
+12	   CYBRD1 -5.2342781 0.9857759 -2.2340826 1.9794870		 -3.251701941   2.1526776    ciaD_avg
+13	   HNRNPL -6.2414567 0.8906426 -2.6200506 2.4148137		 -3.171876556   2.9673184    ciaD_avg
+14	     <NA>  3.8326572 0.6983142  3.4794293 0.9155217		  2.882894453   0.5507236      WT_avg
+15	     <NA> -2.3642995 1.7108203 -1.4518227 0.3664464		 -4.947889661   1.4496381    ciaD_avg
+16	  SMPDL3B  3.4143941 0.1960567  3.6580466 0.1752133		  2.996668720   0.2733005    ciaD_avg
+17	   S100A8  2.4993611 0.7175015  2.1197376 0.7609091		  1.012651223   0.6860130      WT_avg
+18	      FAH  0.4814464 0.3675824  0.5963854 0.2247422		  0.006406674   0.2090825    ciaD_avg
+19	     <NA>  0.5192659 0.5223518  0.9395179 0.7525779		 -4.803109169   1.5449657    ciaD_avg
+20	     LCN2  2.2894034 0.8490275  2.4812615 1.1661658		  0.552540579   0.7951891    ciaD_avg
+21       PRTN3  1.5978725 0.4543886  1.4928821 0.4906813	  0.573751776   0.5064492      WT_avg
+22      S100A9  2.3667873 0.4821403  2.3035973 0.5716951      1.191359122   0.8318700      WT_avg
+23          GK -0.4777823 0.3577705 -0.5735095 0.2832834     -0.109646180   0.1365970 Control_avg
+24       RTRAF -4.1580225 1.1145174 -4.2046263 2.2559308     -2.897625170   1.5472358 Control_avg
+25         ESD -3.6171284 1.2794805 -3.4254905 1.6604841     -2.177881529   1.1770080 Control_avg
+26      ANXA11  1.1254067 0.5915103  1.4148289 0.6041426      0.969866419   0.4765148    ciaD_avg
+27        TGM3  0.8234322 0.1963062  0.7369958 0.6777464     -0.158005148   0.3959168      WT_avg
+28        RIDA  2.6268704 0.3519083  3.0056359 0.4669903      2.565819811   0.3699411    ciaD_avg
+29       PSMA6  1.7278576 0.6514498  1.7662888 0.4722268      1.729672909   0.2981872    ciaD_avg
+30        MIF  2.3909058 0.4386613  2.7216690 0.2832617      2.347210412   0.1269385    ciaD_avg
+
+Plotting SD for top 30 proteins:
+> library(ggplot2)
+> 
+> library(reshape2)
+# Reshape the data from wide to long format for ggplot (for standard deviation)
+top30_protein_long_std <- melt(top30_protein_expression, id.vars = "Protein", 
+                               measure.vars = c("WT_std", "ΔciaD_std", "Control_std"), 
+                               variable.name = "Category", value.name = "StandardDeviation")
+
+# Plotting the standard deviation using ggplot
+ggplot(top30_protein_long_std, aes(x = Protein, y = StandardDeviation, fill = Category)) +
+  geom_bar(stat = "identity", position = "dodge") +  # Bar plot with dodging
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  # Rotate x-axis labels
+  labs(title = "Standard Deviation of Expression Levels for Top 30 Proteins", 
+       x = "Protein", 
+       y = "Standard Deviation") +
+  scale_fill_manual(values = c("WT_std" = "blue", "ΔciaD_std" = "green", "Control_std" = "red")) +
+  theme_minimal()
+
+> # Select the first 4 proteins from the top and the last 4 proteins from the bottom
+> top4_protein_expression <- top30_protein_expression[1:4, ]
+> bottom4_protein_expression <- top30_protein_expression[(nrow(top30_protein_expression)-3):nrow(top30_protein_expression), ]
+> 
+> # View the top 4 and bottom 4 protein expression tables
+> print("Top 4 Protein Expression")
+[1] "Top 4 Protein Expression"
+> print(top4_protein_expression)
+    Protein   WT_avg    WT_std ciaD_avg  ciaD_std Control_avg Control_std Category
+1  SERPINB1 5.436136 0.1464026 5.466450 0.3503714   4.7589554   0.2413884 ciaD_avg
+2   S100A12 4.524419 0.4520154 4.139461 0.8277326   3.1144232   0.5404825   WT_avg
+3 SERPINB10 1.985662 0.3731694 1.748954 0.8203575   0.6022959   0.6126553   WT_avg
+4     OLFM4 2.626732 0.8694742 2.978324 0.4454573   1.2610589   0.4574413 ciaD_avg
+
+> print("Bottom 4 Protein Expression")
+[1] "Bottom 4 Protein Expression"
+> print(bottom4_protein_expression)
+   Protein    WT_avg    WT_std  ciaD_avg  ciaD_std Control_avg Control_std Category
+27    TGM3 0.8234322 0.1963062 0.7369958 0.6777464  -0.1580051   0.3959168   WT_avg
+28    RIDA 2.6268704 0.3519083 3.0056359 0.4669903   2.5658198   0.3699411 ciaD_avg
+29   PSMA6 1.7278576 0.6514498 1.7662888 0.4722268   1.7296729   0.2981872 ciaD_avg
+30     MIF 2.3909058 0.4386613 2.7216690 0.2832617   2.3472104   0.1269385 ciaD_avg
+
+Plotting graphs for mean:
+# Load necessary libraries
+library(ggplot2)
+library(reshape2)
+
+# Reshape the top 4 protein data to long format
+top4_protein_long <- melt(top4_protein_expression, id.vars = "Protein", 
+                          measure.vars = c("WT_avg", "ΔciaD_avg", "Control_avg"), 
+                          variable.name = "Category", value.name = "Expression")
+
+# Reshape the bottom 4 protein data to long format
+bottom4_protein_long <- melt(bottom4_protein_expression, id.vars = "Protein", 
+                             measure.vars = c("WT_avg", "ΔciaD_avg", "Control_avg"), 
+                             variable.name = "Category", value.name = "Expression")
+
+# Plot for the top 4 proteins
+ggplot(top4_protein_long, aes(x = Protein, y = Expression, fill = Category)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Average Expression Levels of Top 4 Proteins", 
+       x = "Protein", 
+       y = "Average Expression") +
+  scale_fill_manual(values = c("WT_avg" = "blue", "ΔciaD_avg" = "green", "Control_avg" = "red")) +
+  theme_minimal()
+
+# Plot for the bottom 4 proteins
+ggplot(bottom4_protein_long, aes(x = Protein, y = Expression, fill = Category)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Average Expression Levels of Bottom 4 Proteins", 
+       x = "Protein", 
+       y = "Average Expression") +
+  scale_fill_manual(values = c("WT_avg" = "blue", "ΔciaD_avg" = "green", "Control_avg" = "red")) +
+  theme_minimal()
+
+Plotting graphs for SD:
+# Reshape the top 4 protein standard deviation data to long format
+top4_protein_sd_long <- melt(top4_protein_expression, id.vars = "Protein", 
++                              measure.vars = c("WT_std", "ciaD_std", "Control_std"), 
++                              variable.name = "Category", value.name = "StandardDeviation")
+
+ 
+# Reshape the bottom 4 protein standard deviation data to long format
+bottom4_protein_sd_long <- melt(bottom4_protein_expression, id.vars = "Protein", 
++                                 measure.vars = c("WT_std", "ciaD_std", "Control_std"), 
++                                 variable.name = "Category", value.name = "StandardDeviation")
+
+# Plot for the standard deviation of the top 4 proteins
+ggplot(top4_protein_sd_long, aes(x = Protein, y = StandardDeviation, fill = Category)) +
++     geom_bar(stat = "identity", position = "dodge") +
++     theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
++     labs(title = "Standard Deviation of Expression Levels for Top 4 Proteins", 
++          x = "Protein", 
++          y = "Standard Deviation") +
++     scale_fill_manual(values = c("WT_std" = "blue", "ciaD_std" = "green", "Control_std" = "red")) +
++     theme_minimal()
+
+# Plot for the standard deviation of the bottom 4 proteins
+ggplot(bottom4_protein_sd_long, aes(x = Protein, y = StandardDeviation, fill = Category)) +
++     geom_bar(stat = "identity", position = "dodge") +
++     theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
++     labs(title = "Standard Deviation of Expression Levels for Bottom 4 Proteins", 
++          x = "Protein", 
++          y = "Standard Deviation") +
++     scale_fill_manual(values = c("WT_std" = "blue", "ciaD_std" = "green", "Control_std" = "red")) +
++     theme_minimal()
+
+Random forest classification for proteins used in project:
+> # List of proteins to include in the analysis
+> proteins_of_interest <- c("LTF", "ARPC2", "ARPC4", "ACTR2", "ACTR3", 
++                           "MPO", "MMP9", "ELANE", "LCN2", 
++                           "S100A8", "S100A9", "ARPC5", "ARPC3")
+> # Filter the data to include only these proteins
+> data_filtered <- data[data$Gene %in% proteins_of_interest, ]
+> 
+> # Exclude metadata columns and keep only numeric data for Random Forest
+> data_numeric <- data_filtered[, sapply(data_filtered, is.numeric)]
+> 
+> # Create the 'group' variable based on column names (e.g., WT, ciaD, Control)
+> group <- ifelse(grepl("F38011 WT", colnames(data_numeric)), "WT",
++                 ifelse(grepl("ciaD", colnames(data_numeric)), "ciaD", "Control"))
+
+> # Convert 'group' to a factor
+> group <- as.factor(group)
+> 
+> # Transpose the numeric data for Random Forest (samples as rows, proteins as columns)
+> data_numeric_t <- t(data_numeric)
+> # Run Random Forest
+> rf_model <- randomForest(x = data_numeric_t, y = group, importance = TRUE)
+> 
+> # View importance of features (proteins)
+> importance_values <- importance(rf_model)
+> print(importance_values)
+
+> # Rank proteins based on importance (MeanDecreaseAccuracy)
+> ranked_features <- importance_values[order(importance_values[, "MeanDecreaseAccuracy"], decreasing = TRUE),]
+
+> # Create a data frame to match protein names with their importance
+> ranked_proteins <- data.frame(Protein = rownames(ranked_features), Importance = ranked_features[, "MeanDecreaseAccuracy"])
+> 
+> # Select the top 5 and top 10 proteins with names
+> top5_proteins <- ranked_proteins[1:5, ]
+> top10_proteins <- ranked_proteins[1:10, ]
+
+> print(top5_proteins)
+   Protein Importance
+S100A9  10.636488
+LCN2    10.187240
+ARPC3   8.282727
+ELANE   5.952397
+ACTR2   4.532472
+
+Which has better accuracy?
+> # Define the MDA values for both sets
+> set1_mda <- c(S100A9 = 10.636488, LCN2 = 10.18724, ARPC3 = 8.282727, ELANE = 5.952397, ACTR2 = 4.532472)
+> set2_mda <- c(SERPINB1 = 9.520071, S100A12 = 8.032163, SERPINB10 = 10.963961, OLFM4 = 14.739888, GOT2 = 9.563702)
+> # Calculate total Mean Decrease Accuracy for each set
+> total_mda_set1 <- sum(set1_mda)
+> total_mda_set2 <- sum(set2_mda)
+> 
+> # Print the total MDA values
+> print(paste("Total MDA for Set 1: ", total_mda_set1))
+[1] "Total MDA for Set 1:  39.591324"
+> print(paste("Total MDA for Set 2: ", total_mda_set2))
+[1] "Total MDA for Set 2:  52.819785"
+
+> # Determine which set has better accuracy
+> if (total_mda_set1 > total_mda_set2) {
++     print("Set 1 has better accuracy.")
++ } else if (total_mda_set1 < total_mda_set2) {
++     print("Set 2 has better accuracy.")
++ } else {
++     print("Both sets have equal accuracy.")
++ }
+[1] "Set 2 has better accuracy."
+> # Identify potential biomarkers (highest individual MDA values)
+> # Set 1
+> top_biomarker_set1 <- names(set1_mda[set1_mda == max(set1_mda)])
+> # Set 2
+> top_biomarker_set2 <- names(set2_mda[set2_mda == max(set2_mda)])
+> 
+> # Print potential biomarkers
+> print(paste("Potential biomarker from Set 1: ", top_biomarker_set1))
+[1] "Potential biomarker from Set 1:  S100A9"
+> print(paste("Potential biomarker from Set 2: ", top_biomarker_set2))
+[1] "Potential biomarker from Set 2:  S100A12"
+
+# Required libraries
+library(randomForest)
+library(caret)
+library(pROC)
+
+# Define the two sets of proteins
+set1_proteins <- c("S100A9", "LCN2", "ARPC3", "ELANE", "S100A8", 
+                  "ARPC2", "ACTR2", "LTF", "MPO", "ACTR3")
+set2_proteins <- c("SERPINB1", "S100A12", "SERPINB10", "OLFM4", "GOT2", 
+                  "GPI", "TALDO1", "LTF")  # Excluding NA entries
+
+# Function to evaluate model performance
+evaluate_protein_set <- function(protein_names, data_numeric, group) {
+  # Find indices of proteins in the dataset
+  protein_indices <- match(protein_names, data$Gene)
+  protein_indices <- protein_indices[!is.na(protein_indices)]
+  
+  # Prepare data
+  data_subset <- t(data_numeric[protein_indices, ])
+  data_subset <- data.frame(data_subset)
+  data_subset$Group <- group
+  
+  # Initialize performance metrics storage
+  cv_metrics <- data.frame(
+    Accuracy = numeric(5),
+    Sensitivity = numeric(5),
+    Specificity = numeric(5),
+    AUC = numeric(5)
+  )
+  
+  # Perform 5-fold cross-validation
+  set.seed(123)
+  folds <- createFolds(group, k = 5, list = TRUE)
+  
+  for(i in seq_along(folds)) {
+    # Split data
+    test_indices <- folds[[i]]
+    train_data <- data_subset[-test_indices, ]
+    test_data <- data_subset[test_indices, ]
+    
+    # Train model
+    rf_model <- randomForest(
+      Group ~ ., 
+      data = train_data,
+      ntree = 500,
+      importance = TRUE
+    )
+    
+    # Make predictions
+    predictions <- predict(rf_model, test_data)
+    pred_prob <- predict(rf_model, test_data, type = "prob")
+    
+    # Calculate metrics
+    conf_matrix <- confusionMatrix(predictions, test_data$Group)
+    cv_metrics$Accuracy[i] <- conf_matrix$overall["Accuracy"]
+    cv_metrics$Sensitivity[i] <- mean(conf_matrix$byClass[, "Sensitivity"])
+    cv_metrics$Specificity[i] <- mean(conf_matrix$byClass[, "Specificity"])
+    
+    # Calculate multiclass AUC
+    auc_values <- numeric(length(levels(group)))
+    for(j in seq_along(levels(group))) {
+      class_name <- levels(group)[j]
+      auc_values[j] <- auc(test_data$Group == class_name, pred_prob[, class_name])
+    }
+    cv_metrics$AUC[i] <- mean(auc_values)
+  }
+  
+  # Calculate mean and SD of metrics
+  performance_summary <- data.frame(
+    Metric = c("Accuracy", "Sensitivity", "Specificity", "AUC"),
+    Mean = c(
+      mean(cv_metrics$Accuracy),
+      mean(cv_metrics$Sensitivity),
+      mean(cv_metrics$Specificity),
+      mean(cv_metrics$AUC)
+    ),
+    SD = c(
+      sd(cv_metrics$Accuracy),
+      sd(cv_metrics$Sensitivity),
+      sd(cv_metrics$Specificity),
+      sd(cv_metrics$AUC)
+    )
+  )
+  
+  # Get feature importance
+  final_model <- randomForest(Group ~ ., data = data_subset, importance = TRUE)
+  importance_scores <- importance(final_model)
+  
+  return(list(
+    performance = performance_summary,
+    importance = importance_scores,
+    cv_metrics = cv_metrics
+  ))
+}
+
+# Evaluate both sets
+set1_results <- evaluate_protein_set(set1_proteins, data_numeric, group)
+set2_results <- evaluate_protein_set(set2_proteins, data_numeric, group)
+
+# Print results
+cat("\nSet 1 (Original proteins) Performance:\n")
+print(set1_results$performance)
+
+cat("\nSet 2 (New proteins) Performance:\n")
+print(set2_results$performance)
+
+# Statistical comparison of accuracies
+accuracy_comparison <- t.test(
+  set1_results$cv_metrics$Accuracy,
+  set2_results$cv_metrics$Accuracy,
+  paired = TRUE
+)
+
+cat("\nStatistical comparison of accuracies:\n")
+print(accuracy_comparison)
+
+# Plot feature importance for both sets
+library(ggplot2)
+
+# For Set 1
+importance_df1 <- data.frame(
+  Protein = rownames(set1_results$importance),
+  Importance = set1_results$importance[, "MeanDecreaseAccuracy"]
+)
+
+ggplot(importance_df1, aes(x = reorder(Protein, Importance), y = Importance)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Set 1 Feature Importance",
+       x = "Protein",
+       y = "Mean Decrease in Accuracy")
+
+# For Set 2
+importance_df2 <- data.frame(
+  Protein = rownames(set2_results$importance),
+  Importance = set2_results$importance[, "MeanDecreaseAccuracy"]
+)
+
+ggplot(importance_df2, aes(x = reorder(Protein, Importance), y = Importance)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Set 2 Feature Importance",
+       x = "Protein",
+       y = "Mean Decrease in Accuracy")
+
+
+
